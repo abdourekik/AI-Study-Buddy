@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Buddy AI - Advanced Learning Platform</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>📚 Study Buddy</h2>
+                <p class="subtitle">AI Learning Platform</p>
+            </div>
+
+            <!-- PDF Upload Section -->
+            <div class="pdf-section">
+                <h3>📄 Document Analysis</h3>
+                <input type="file" id="pdfInput" accept=".pdf" style="display: none;">
+                <button class="upload-btn" onclick="document.getElementById('pdfInput').click()">
+                    📎 Upload PDF
+                </button>
+                <div id="pdfStatus" class="pdf-status"></div>
+                <button id="generateQuizBtn" class="quiz-btn" style="display: none;">
+                    ❓ Generate Quiz
+                </button>
+            </div>
+
+            <!-- Mode Selector -->
+            <div class="mode-section">
+                <h3>🎯 Study Modes</h3>
+                <div class="mode-buttons">
+                    <button class="mode-btn active" data-mode="explain">
+                        <span class="mode-icon">📖</span>
+                        <span class="mode-name">Explain</span>
+                    </button>
+                    <button class="mode-btn" data-mode="quiz">
+                        <span class="mode-icon">❓</span>
+                        <span class="mode-name">Quiz</span>
+                    </button>
+                    <button class="mode-btn" data-mode="review">
+                        <span class="mode-icon">📝</span>
+                        <span class="mode-name">Review</span>
+                    </button>
+                    <button class="mode-btn" data-mode="practice">
+                        <span class="mode-icon">✏️</span>
+                        <span class="mode-name">Practice</span>
+                    </button>
+                    <button class="mode-btn" data-mode="summarize">
+                        <span class="mode-icon">📋</span>
+                        <span class="mode-name">Summarize</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Settings -->
+            <div class="settings-section">
+                <h3>⚙️ Settings</h3>
+                <div class="setting-item">
+                    <label>Temperature: <span id="tempValue">0.7</span></label>
+                    <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.7">
+                </div>
+                <div class="setting-item">
+                    <label>Max Length: <span id="tokensValue">800</span></label>
+                    <input type="range" id="maxTokens" min="200" max="1500" step="100" value="800">
+                </div>
+            </div>
+
+            <!-- Session History -->
+            <div class="history-section">
+                <h3>🕐 Recent Sessions</h3>
+                <div id="historyList" class="history-list"></div>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="main-content">
+            <!-- Header -->
+            <div class="chat-header">
+                <div class="header-left">
+                    <h1>Study Buddy AI</h1>
+                    <p id="modeIndicator" class="mode-indicator">📖 Explain Mode</p>
+                </div>
+                <div class="header-actions">
+                    <button id="clearBtn" class="header-btn" title="Clear conversation">
+                        🗑️ Clear
+                    </button>
+                    <button id="saveBtn" class="header-btn" title="Save session">
+                        💾 Save
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Container -->
+            <div class="chat-container" id="chatContainer">
+                <div class="welcome-card">
+                    <div class="welcome-icon">🎓</div>
+                    <h2>Welcome to Study Buddy AI!</h2>
+                    <p>Your advanced AI learning companion</p>
+                    <div class="feature-grid">
+                        <div class="feature-item">
+                            <span class="feature-icon">📄</span>
+                            <span>Upload & Analyze PDFs</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">❓</span>
+                            <span>Auto-Generate Quizzes</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">📝</span>
+                            <span>Create Study Notes</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">💬</span>
+                            <span>Interactive Learning</span>
+                        </div>
+                    </div>
+                    <p class="start-prompt">Upload a PDF or ask me anything to get started!</p>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-container">
+                <div class="input-wrapper">
+                    <textarea 
+                        id="messageInput" 
+                        placeholder="Ask me anything or upload a PDF to analyze..."
+                        rows="1"
+                    ></textarea>
+                    <button id="sendBtn" class="send-btn">
+                        <span class="send-icon">➤</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'explain';
+        let temperature = 0.7;
+        let maxTokens = 800;
+        const sessionId = Date.now().toString();
+        let hasPDF = false;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadHistory();
+            autoResizeTextarea();
+        });
+
+        // Mode switching
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                currentMode = this.dataset.mode;
+                
+                const modeNames = {
+                    'explain': '📖 Explain Mode',
+                    'quiz': '❓ Quiz Mode',
+                    'review': '📝 Review Mode',
+                    'practice': '✏️ Practice Mode',
+                    'summarize': '📋 Summarize Mode'
+                };
+                
+                document.getElementById('modeIndicator').textContent = modeNames[currentMode];
+                addSystemMessage(`Switched to ${modeNames[currentMode]}`);
+            });
+        });
+
+        // Settings
+        document.getElementById('temperature').addEventListener('input', function() {
+            temperature = parseFloat(this.value);
+            document.getElementById('tempValue').textContent = temperature.toFixed(1);
+        });
+
+        document.getElementById('maxTokens').addEventListener('input', function() {
+            maxTokens = parseInt(this.value);
+            document.getElementById('tokensValue').textContent = maxTokens;
+        });
+
+        // PDF Upload
+        document.getElementById('pdfInput').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('pdf', file);
+            formData.append('session_id', sessionId);
+
+            const statusDiv = document.getElementById('pdfStatus');
+            statusDiv.innerHTML = '<div class="loading">📄 Analyzing PDF...</div>';
+
+            try {
+                const response = await fetch('/upload_pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    hasPDF = true;
+                    statusDiv.innerHTML = `<div class="success">✅ ${data.filename}</div>`;
+                    document.getElementById('generateQuizBtn').style.display = 'block';
+                    
+                    addMessage(`PDF "${data.filename}" uploaded successfully!`, 'system');
+                    addMessage(data.summary, 'assistant');
+                } else {
+                    statusDiv.innerHTML = `<div class="error">❌ ${data.error}</div>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">❌ Upload failed</div>`;
+            }
+        });
+
+        // Generate Quiz
+        document.getElementById('generateQuizBtn').addEventListener('click', async function() {
+            addMessage("Generating quiz from your document...", 'system');
+            const typingId = addTypingIndicator();
+
+            try {
+                const response = await fetch('/generate_quiz', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+                removeTypingIndicator(typingId);
+
+                if (data.success) {
+                    addMessage(data.quiz, 'assistant');
+                } else {
+                    addMessage('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                removeTypingIndicator(typingId);
+                addMessage('Error generating quiz', 'error');
+            }
+        });
+
+        // Send message
+        async function sendMessage() {
+            const textarea = document.getElementById('messageInput');
+            const message = textarea.value.trim();
+            
+            if (!message) return;
+            
+            textarea.value = '';
+            textarea.style.height = 'auto';
+            
+            addMessage(message, 'user');
+            
+            const typingId = addTypingIndicator();
+            
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        session_id: sessionId,
+                        mode: currentMode,
+                        temperature: temperature,
+                        max_tokens: maxTokens
+                    })
+                });
+                
+                const data = await response.json();
+                removeTypingIndicator(typingId);
+                
+                if (data.success) {
+                    addMessage(data.message, 'assistant');
+                } else {
+                    addMessage('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                removeTypingIndicator(typingId);
+                addMessage('Error connecting to server', 'error');
+            }
+        }
+
+        // Add message to chat
+        function addMessage(text, type) {
+            const container = document.getElementById('chatContainer');
+            const welcomeCard = container.querySelector('.welcome-card');
+            if (welcomeCard) welcomeCard.remove();
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            
+            const icons = {
+                'user': '👤',
+                'assistant': '🤖',
+                'system': 'ℹ️',
+                'error': '⚠️'
+            };
+            
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${icons[type] || '💬'}</div>
+                <div class="message-bubble">
+                    <div class="message-text">${formatMessage(text)}</div>
+                    <div class="message-time">${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
+            
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function addSystemMessage(text) {
+            addMessage(text, 'system');
+        }
+
+        function formatMessage(text) {
+            return text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        }
+
+        // Typing indicator
+        function addTypingIndicator() {
+            const container = document.getElementById('chatContainer');
+            const typingDiv = document.createElement('div');
+            const id = 'typing-' + Date.now();
+            typingDiv.id = id;
+            typingDiv.className = 'message assistant-message typing';
+            typingDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-bubble">
+                    <div class="typing-indicator">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            `;
+            container.appendChild(typingDiv);
+            container.scrollTop = container.scrollHeight;
+            return id;
+        }
+
+        function removeTypingIndicator(id) {
+            const element = document.getElementById(id);
+            if (element) element.remove();
+        }
+
+        // Clear conversation
+        async function clearConversation() {
+            if (!confirm('Clear the entire conversation?')) return;
+            
+            await fetch('/clear', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_id: sessionId
+                })
+            });
+            
+            const container = document.getElementById('chatContainer');
+            container.innerHTML = `
+                <div class="welcome-card">
+                    <div class="welcome-icon">🎓</div>
+                    <h2>Welcome to Study Buddy AI!</h2>
+                    <p>Start a new learning session</p>
+                </div>
+            `;
+
+            document.getElementById('pdfStatus').innerHTML = '';
+            document.getElementById('generateQuizBtn').style.display = 'none';
+            hasPDF = false;
+        }
+
+        // Save session
+        async function saveSession() {
+            const response = await fetch('/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    mode: currentMode
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                addSystemMessage('✅ Session saved successfully!');
+                loadHistory();
+            } else {
+                addSystemMessage('❌ Error: ' + data.error);
+            }
+        }
+
+        // Load history
+        async function loadHistory() {
+            try {
+                const response = await fetch('/get_history');
+                const data = await response.json();
+                
+                if (data.success && data.sessions.length > 0) {
+                    const historyList = document.getElementById('historyList');
+                    historyList.innerHTML = data.sessions.map(session => `
+                        <div class="history-item">
+                            <div class="history-date">${session.date}</div>
+                            <div class="history-info">
+                                ${session.mode} • ${session.messages} msgs
+                                ${session.had_pdf ? '📄' : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
+
+        // Auto-resize textarea
+        function autoResizeTextarea() {
+            const textarea = document.getElementById('messageInput');
+            textarea.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+            });
+        }
+
+        // Event listeners
+        document.getElementById('sendBtn').addEventListener('click', sendMessage);
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        document.getElementById('clearBtn').addEventListener('click', clearConversation);
+        document.getElementById('saveBtn').addEventListener('click', saveSession);
+
+        // Focus input
+        document.getElementById('messageInput').focus();
+    </script>
+</body>
+</html>
