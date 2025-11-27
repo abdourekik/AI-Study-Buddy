@@ -94,7 +94,7 @@ AI Study Buddy revolutionizes the learning experience by leveraging advanced AI 
 - Groq API key ([Get one free](https://console.groq.com))
 - pip (Python package manager)
 
-### Quick Start
 
-1. **Clone the repository**
-```bash
+
+
+
